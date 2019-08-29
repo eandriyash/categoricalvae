@@ -40,7 +40,7 @@ def parameters():
                 'name': 'ffwd_cat',
                 'num_hidden': [200, 200],
                 'activation': 'relu',
-                'normalization': 'batch',
+                'normalization': 'weight',
                 'beta': 1.5,
                 'l2_reg': 1e-4
             },
@@ -48,7 +48,7 @@ def parameters():
                 'name': 'ffwd_bern',
                 'num_hidden': [200, 200],
                 'activation': 'relu',
-                'normalization': 'batch',
+                'normalization': 'weight',
                 'l2_reg': 1e-4
             }
         }

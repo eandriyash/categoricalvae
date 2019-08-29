@@ -18,10 +18,10 @@ class EncoderFFwdCat(tf.keras.layers.Layer):
         layers += [nn.DenseNorm(num_outputs,kernel_regularizer=tf.keras.regularizers.l2(self.p.l2_reg))]
         self.layers = layers
 
-    def call(self, x, training=None):
+    def call(self, x, training=None, data_init=None):
         x -= self.p.init_m
         for l in self.layers:
-            x = l(x, training)
+            x = l(x, training, data_init)
         logits = tf.reshape(x, [-1, self.lp.num_var, self.lp.num_cat])
         z = dist.reparameterize_cat_gsm(logits, beta=self.p.beta, training=training)
         return z, logits
@@ -44,11 +44,11 @@ class DecoderFFwdBern(tf.keras.layers.Layer):
                                 bias_initializer=tf.constant_initializer(self.p.init_bias))]
         self.layers = layers
 
-    def call(self, x, training=None):
+    def call(self, x, training=None, data_init=None):
         shape = tf.shape(x)
         x = tf.reshape(x, [-1, shape[-1]*shape[-2]])
         for l in self.layers:
-            x = l(x, training)
+            x = l(x, training, data_init)
         logits = x
         z = dist.sample_bernoulli(tf.sigmoid(logits))
         return z, logits
@@ -64,8 +64,8 @@ class VAE(tf.keras.Model):
         self.decoder = DecoderFFwdBern(p.decoder, p.num_inputs)
         self.prior = dist.Categorical(p.latents.num_var, p.latents.num_cat)
 
-    def elbo_calc(self, z, z_logits, x, kl_coeff=1, training=None):
-        _, x_logits = self.decoder(z, training)
+    def elbo_calc(self, z, z_logits, x, kl_coeff=1, training=None, data_init=None):
+        _, x_logits = self.decoder(z, training, data_init)
         reconstruction = self.decoder.neglogp(x, x_logits)
         energy = self.prior.neglogp(z)
         entropy = self.encoder.neglogp(z, z_logits)
@@ -79,11 +79,11 @@ class VAE(tf.keras.Model):
         else:
             return tf.reduce_mean(elbo)
 
-    def call(self, x, training=None, iw_k=1,kl_coeff=1, mask=None):
+    def call(self, x, training=None, data_init=None, iw_k=1,kl_coeff=1, mask=None):
         if iw_k > 1:
             shape = tf.shape(x)
             x = tf.reshape(tf.tile(tf.expand_dims(x, axis=1), [1, iw_k, 1]), [-1, shape[-1]])
-        z, z_logits = self.encoder(x, training=training)
-        elbo = self.elbo_calc(z, z_logits, x, training=training, kl_coeff=kl_coeff)
+        z, z_logits = self.encoder(x, training, data_init)
+        elbo = self.elbo_calc(z, z_logits, x, training=training, data_init=data_init, kl_coeff=kl_coeff)
         iw_ll = self.iw_loglikelihood(elbo, iw_k)
         return iw_ll

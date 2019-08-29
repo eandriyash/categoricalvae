@@ -52,22 +52,26 @@ class DenseNorm(tf.keras.layers.Layer):
                                          trainable=True)
             if self.norm == 'lipschitz':
                 self.v = self.add_weight(name='v',
-                                         shape=self.input_shape[1],
+                                         shape=[input_shape[1]],
                                          initializer=tf.random_normal_initializer(stddev=1e-3),
                                          trainable=False)
 
         super(DenseNorm, self).build(input_shape)  # Be sure to call this at the end
 
-    def call(self, x, training=None, **kwargs):
+    def call(self, x, training=None, data_init=None, **kwargs):
         a = tf.matmul(x, self.kernel)
         if self.norm=='weight':
             W_norm = tf.sqrt(tf.reduce_sum(tf.square(self.kernel), [0]) + 1e-10)
+            if data_init:
+                m_init, v_init = tf.nn.moments(a, [0])
+                scale_init = 1 / tf.sqrt(v_init + 1e-10)
+                self.g.assign(W_norm * scale_init)
+                self.b.assign(-m_init * scale_init)
             y = self.g / W_norm * a + self.b
         elif self.norm=='lipschitz':
             v_new = tf.reduce_sum(self.kernel * tf.reduce_sum(tf.expand_dims(self.v, 1) * self.kernel, axis=0), axis=-1)
             v_new /= tf.sqrt(tf.reduce_sum(tf.square(v_new)))
-            self.v = tf.stop_gradient(v_new)
-            self.add_update()
+            self.v.assign(tf.stop_gradient(v_new))
             norm = tf.reduce_sum(self.v * tf.reduce_sum(self.kernel * tf.reduce_sum(tf.expand_dims(self.v, 1) * self.kernel, axis=0), axis=-1))
             scale = LIPSHITZ_SCALE / tf.sqrt(norm)
             y = scale * a + self.b
